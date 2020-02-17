@@ -47,9 +47,10 @@ STD='\033[0;0;39m'
 #initialisation de la base de donnees
 ##-----------------------------------------------------------------------
 function init(){
-			echo "Creation de la base de donnees"
 		        sqlite3 "$FILE" < "$DIR/db/gitStatisticaSchema.sql"
-                rm temp.csv
+                rm tempgitstatistica.csv
+                rm tempgitstatistica2.csv
+                rm tempgitstatistica3.csv
 	        
 }
 
@@ -59,30 +60,29 @@ function init(){
 pause(){
    read -p "Press [Enter] key to continue..." fackEnterKey
   }
-#------------------------------------------------------------------------  
-# fonction pour calculer implication developpeur dans un repo ou fichier
-#-------------------------------------------------------------------------
-implication(){
-	 echo "one() called"
+
+
+#------------------------------------------------------------------------
+#  Calculer l'implication
+#-----------------------------------------------------------------------
+function calculerImplication(){
+    export -f implication
+ DIR=$1
+     cat tempgitstatistica2.csv \
+     | cut -d ',' -f 2 \
+     | sort | uniq \
+     | xargs -n 1 -P 10 -I {} bash -c 'implication "$@"' _ {}  > tempgitstatistica3.csv
+   #  | xargs -I {} ./"$DIR"/implication.sh {} \
+}
+
+function implication(){
          USERNAME=$1
-         INDEX=${2:-list_contrib.csv}
+         INDEX=${2:-tempgitstatistica2.csv}
          T=$(cat $INDEX | wc -l | tr -d ' ')
          C=$(cat $INDEX | grep ",${USERNAME}$" | wc -l | tr -d ' ')
         RESULT=$(echo "scale=5; ($C / $T) * 100" | bc)
         printf "%s,%d,%.2f\n" "$USERNAME" "$C" "$RESULT"
  }
-
-AfficherContributeur(){
-FILENAME=$1
-if [ ! -f $FILENAME ]
-then
-	echo "Expecting a single file as argument"
-        exit 1
-fi
-	git log --pretty=format:"%an" $FILENAME | sort | uniq | xargs -I '{}' echo "$FILENAME,{}"
-	pause
- }
-
 ##-----------------------------------------------------------------------
 # Contribution par nom de fichier ou extension
 ##-----------------------------------------------------------------------
@@ -94,31 +94,64 @@ function contributionParFichier(){
 			echo "Expecting a single file as argument"
 			exit 1
 	fi
+
 	git log --pretty=format:"%an" $FILENAME \
 		 | sort | uniq \
-	 	 | xargs -I '{}' echo "$FILENAME,{}"
+         | xargs -I '{}' echo "$FILENAME,{}"
+
 
 }
 
+##---------------------------------------------------------------------
+#
+# list des contribution
+#
+#---------------------------------------------------------------------
+
+function listContributionJava(){
+
+    export -f contributionParFichier
+
+    find . -name '*.java' -exec bash -c 'contributionParFichier "$0"' {} \; > tempgitstatistica2.csv
+}
+#-----------------------------------------------------------------------
+# nombre de fichier dans un repos
+#--------------------------------------------------------------------
+function nombreFichier(){
+	FILENAME=$1
+	if [[ -n "${FILENAME}" ]]; then 
+		  _fichier=$FILENAME
+		else
+		   	echo "La valeur default est des fichiers rechercher est : *.java"
+			_fichier="*.java"
+	fi
+	find . -name "$_fichier" | wc -l | tr -d ' '
+	
+	pause
+}
 ##-----------------------------------------------------------------------
 # statistique de commit par année et par auteur
 ##-----------------------------------------------------------------------
 function exportNombreCommitParAnneeParAuteur(){
-        users=$(git shortlog -sn --no-merges | awk '{printf "%s %s\n", $2, $3}')
+    FILE=$1
+    users=$(git shortlog -sn --no-merges | awk '{printf "%s %s\n", $2, $3}')
 	IFS=$'\n'
+	_T=$(nombreFichier)
 	for userName in $users
 	     do
-		gitCmdYear=$(git log --pretty='format:%cd' --date=format:'%Y' --author "$userName"| uniq -c | awk '{printf "%s\n",$2}')
-		aryYear=($gitCmdYear)
-		gitCmdCommit=$(git log --pretty='format:%cd' --date=format:'%Y' --author "$userName"| uniq -c | awk '{printf "%s\n",$1}')
-		aryCommit=($gitCmdCommit)
-		for index in ${!aryYear[*]}
-		do
-		  sqlite3 "$FILE" "INSERT INTO commitParAnneeParAuteur values('$userName',${aryYear[$index]},${aryCommit[$index]});"
-	        done
+            gitCmdYear=$(git log --pretty='format:%cd' --date=format:'%Y' --author "$userName"| uniq -c | awk '{printf "%s\n",$2}')
+            aryYear=($gitCmdYear)
+            gitCmdCommit=$(git log --pretty='format:%cd' --date=format:'%Y' --author "$userName"| uniq -c | awk '{printf "%s\n",$1}')
+            aryCommit=($gitCmdCommit)
+            for index in ${!aryYear[*]}
+                do
+                        _impl=""
+                        sqlite3 "$FILE" "INSERT INTO commitParAnneeParAuteur values('$userName',${aryYear[$index]},${aryCommit[$index]});"
+                done
 	     done
 
     echo "Fin extraction et export des donnes ver sqlite ... Enjoy"
+
 }
 
 
@@ -127,7 +160,8 @@ function exportNombreCommitParAnneeParAuteur(){
 # statistique détailler du git
 ##----------------------------------------------------------------------- 
 function exportDetailedGitStats() {
-
+  FILE=$1
+  DIR=$2
     echo "Debut de l'export des donnees details pour le repo..."
    git -c log.showSignature=false log  --use-mailmap --date=format:'%Y-%m-%d' $_merges --numstat  \
         --pretty="format:commit %H%nAuthor: %aN <%aE>%nDate:   %ad%n%n%w(0,4,4)%B%n" \
@@ -157,10 +191,13 @@ function exportDetailedGitStats() {
             {printf "%s,%s,%s,%s,%s,%s,%s,%s\n",author,commits[author], file[author] ,more[author]  ,less[author], more[author]+less[author] , first[author], last[author]}
             }
         }
-        }' >> temp.csv 
+        }' >> tempgitstatistica.csv 
 	
+    echo "Debut d'export de la liste de contributeur par fichier java ..." $(listContributionJava)
+    echo "Calcule de l'implication  des developpeur dans le repo ... " $(calculerImplication "$DIR")
 	echo "Initialisation de la base de donnee et export des details ..." $(init)	 
-	echo "Debut d'export des nombre commit par annee par contributeur ..." $(exportNombreCommitParAnneeParAuteur) 
+	echo "Debut d'export des nombre commit par annee par contributeur ..." $(exportNombreCommitParAnneeParAuteur "$FILE")
+
 
 	pause
 
@@ -262,8 +299,9 @@ show_menus() {
 		echo "2. Afficher les statistiques des merges"
 		echo "3. Afficher les changement dans repo Git les 30 dernier jours"
 		echo "4. Afficher les commit par mois"
-		echo "5. Export detail du logs vers sqlite table"
-		echo "6. Exit"
+		echo "5. Afficher le nombre de fichier (par default :*.java)"
+		echo "6. Export detail du logs vers sqlite table"
+        echo "7. Exit"
 	}
 
 # read input from the keyboard and take a action
@@ -272,14 +310,15 @@ show_menus() {
 # Exit when user the user select 3 form the menu option.
 read_options(){
 		local choice
-	        read -p "Enter choice [ 1 - 6] " choice
+	        read -p "Enter choice [ 1 - 7] " choice
 		case $choice in
 		1) AfficherContributeur ;;
 		2) mergeStatistique ;;
 		3) logsDesChangement ;; 
 		4) commitParMois ;;
-		5) exportDetailedGitStats ;;
-		6) exit 0;;
+		5) nombreFichier ;;
+		6) exportDetailedGitStats $FILE $DIR ;;
+        7) exit 0;;
 		*) echo -e "${RED}Error...${STD}" && sleep 2
 		esac
 }
