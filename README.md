@@ -19,5 +19,13 @@ $ ../MGL_7460/gitStatistica/gitStatistica.sh
 # Git-Statistica
 Menu principal
 
-![Désolé un probelem de chargement d'image ...](http://www.sampleurl.com/logo.png)
+![Désolé un probelem de chargement d'image ...](https://github.com/nsalem-it/MGL_7460/blob/master/images/gitStatisticaMenu.png)
+
+Statistique des merges
+![Désolé un probelem de chargement d'image ...](https://github.com/nsalem-it/MGL_7460/blob/master/images/statistiqueMerge.png)
+
+Statistique des comits par mois
+![Désolé un probelem de chargement d'image ...](https://github.com/nsalem-it/MGL_7460/blob/master/images/comitParMois.png)
+
+
 
