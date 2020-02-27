@@ -3,7 +3,8 @@
 
 # Log file
 *.log
-
+*.docx
+*.tmp
 # BlueJ files
 *.ctxt
 
@@ -23,7 +24,6 @@
 hs_err_pid*
 
 # base de donne
-*.sqlite
 *.db
 # gradle
 .gradle
